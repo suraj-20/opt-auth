@@ -1,6 +1,4 @@
 import React from 'react'
-import Carousel from "./Carousel"
-import axios from "axios"
 import image from "../styles/images/2.2.jpg"
 import OtpForm from './OtpForm'
 

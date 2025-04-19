@@ -36,7 +36,17 @@ exports.sendOtp = async (req, res) => {
       await sendWhatsappOtp(mobile, otp);
     }
 
-    res.status(200).json({ message: "OTP sent successfully." });
+    // Prepare response data
+    const responseData = {
+      method,
+      ...(method === "email" && { email }),
+      ...(method !== "email" && { mobile }),
+    };
+
+    res.status(200).json({
+      message: "OTP sent successfully.",
+      data: responseData,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to send OTP." });
@@ -44,24 +54,47 @@ exports.sendOtp = async (req, res) => {
 };
 
 exports.verifyOtp = async (req, res) => {
-  const { mobile, email, otp } = req.body;
+  const { otp } = req.body;
 
   try {
-    const existingOtp = await Otp.findOne({ $or: [{ mobile }, { email }] });
-    if (!existingOtp)
-      return res.status(400).json({ message: "OTP expired or not found." });
+    // Find unexpired OTPs
+    const existingOtps = await Otp.find({ expiresAt: { $gt: new Date() } });
 
-    const isMatch = await bcrypt.compare(otp, existingOtp.otp);
-    if (!isMatch) return res.status(400).json({ message: "Invalid OTP." });
+    let matchedOtp = null;
 
-    await Otp.deleteOne({ _id: existingOtp._id });
+    // Match OTP using bcrypt
+    for (let otpEntry of existingOtps) {
+      const isMatch = await bcrypt.compare(otp, otpEntry.otp);
+      if (isMatch) {
+        matchedOtp = otpEntry;
+        break;
+      }
+    }
 
-    const token = jwt.sign({ mobile, email }, process.env.JWT_SECRET, {
-      expiresIn: "1h",
+    if (!matchedOtp) {
+      return res.status(400).json({ message: "Invalid or expired OTP." });
+    }
+
+    // Delete OTP after successful verification
+    await Otp.deleteOne({ _id: matchedOtp._id });
+
+    const token = jwt.sign(
+      { mobile: matchedOtp.mobile, email: matchedOtp.email },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    res.status(200).json({
+      message: "OTP verified successfully",
+      token,
+      user: {
+        method: matchedOtp.email ? "email" : "mobile",
+        email: matchedOtp.email || null,
+        mobile: matchedOtp.mobile || null,
+      },
     });
-
-    res.status(200).json({ message: "OTP verified successfully", token });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "OTP verification failed." });
   }
 };
