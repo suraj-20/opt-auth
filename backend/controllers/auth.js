@@ -60,16 +60,8 @@ exports.verifyOtp = async (req, res) => {
     // Find unexpired OTPs
     const existingOtps = await Otp.find({ expiresAt: { $gt: new Date() } });
 
-    let matchedOtp = null;
-
-    // Match OTP using bcrypt
-    for (let otpEntry of existingOtps) {
-      const isMatch = await bcrypt.compare(otp, otpEntry.otp);
-      if (isMatch) {
-        matchedOtp = otpEntry;
-        break;
-      }
-    }
+    // Match OTP directly (no bcrypt)
+    const matchedOtp = existingOtps.find((otpEntry) => otpEntry.otp === otp);
 
     if (!matchedOtp) {
       return res.status(400).json({ message: "Invalid or expired OTP." });
@@ -78,6 +70,7 @@ exports.verifyOtp = async (req, res) => {
     // Delete OTP after successful verification
     await Otp.deleteOne({ _id: matchedOtp._id });
 
+    // Create JWT token
     const token = jwt.sign(
       { mobile: matchedOtp.mobile, email: matchedOtp.email },
       process.env.JWT_SECRET,
