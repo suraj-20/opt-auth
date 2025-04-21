@@ -46,6 +46,7 @@ exports.sendOtp = async (req, res) => {
     res.status(200).json({
       message: "OTP sent successfully.",
       data: responseData,
+      otp: method === "email" ? undefined : otp,
     });
   } catch (err) {
     console.error(err);
